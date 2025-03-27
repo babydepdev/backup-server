@@ -2,7 +2,7 @@ const express = require("express");
 const fs = require("fs");
 const path = require("path");
 const app = express();
-const port = 8000;
+const port = process.env.PORT || 3000;
 const bodyParser = require("body-parser");
 const morgan = require("morgan");
 const cors = require("cors");
@@ -12,50 +12,25 @@ app.use(bodyParser.urlencoded({ extended: true }));
 app.use(morgan("dev"));
 app.use(cors({ origin: "*" }));
 
-const BASE_DIR = path.join(__dirname);
+const BASE_DIR = "/";
 
-app.post("/backup", (req, res) => {
-  let { path: filePath, moveTo } = req.body;
-
-  if (!filePath || !moveTo) {
-    return res.status(400).json({ error: "Both path and moveTo are required" });
+app.get("/backup", (req, res) => {
+  let { pathSource } = req.query;
+  if (!pathSource) {
+    return res.status(400).json({ error: "File path is required" });
   }
 
-  filePath = path.join(BASE_DIR, filePath);
-  const dirPath = path.dirname(filePath);
+  pathSource = path.join(BASE_DIR, pathSource);
 
-  const moveToPath = path.join(BASE_DIR, moveTo);
-  const moveToDir = path.dirname(moveToPath);
-
-  fs.mkdir(dirPath, { recursive: true }, (err) => {
+  fs.access(pathSource, fs.constants.F_OK, (err) => {
     if (err) {
-      return res.status(500).json({ error: "Failed to create directory" });
+      return res.status(404).json({ error: "File not found" });
     }
 
-    // สร้างไฟล์
-    fs.writeFile(filePath, "Analogysads", (err) => {
+    res.download(pathSource, (err) => {
       if (err) {
-        return res.status(500).json({ error: "Failed to create file" });
+        return res.status(500).json({ error: "Failed to send file" });
       }
-
-      fs.mkdir(moveToDir, { recursive: true }, (err) => {
-        if (err) {
-          return res
-            .status(500)
-            .json({ error: "Failed to create move-to directory" });
-        }
-
-        fs.rename(filePath, moveToPath, (err) => {
-          if (err) {
-            return res.status(500).json({ error: "Failed to move file" });
-          }
-          res.json({
-            message: "File moved successfully",
-            from: filePath,
-            to: moveToPath,
-          });
-        });
-      });
     });
   });
 });
