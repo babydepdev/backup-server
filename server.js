@@ -14,7 +14,7 @@ app.use(cors({ origin: "*" }));
 
 app.get("/backup", (req, res) => {
   const dayOfWeek = new Date().toLocaleDateString("en-US", { weekday: "long" });
-  const backupPath = `/tmp/${dayOfWeek}.tar.gz`;
+  const backupPath = `/tmp/${dayOfWeek}.tar`;
 
   const dumpCommand = `mongodump --host localhost --port 27017 --archive=${backupPath}.tar`;
 
