@@ -1,0 +1,7 @@
+[CMD Backup]
+mongodump --host localhost --port 27017 --archive=/tmp/dump.tar --gzip
+
+
+
+#!/bin/bash
+mongodump --host localhost --port 27017 --archive=/tmp/$(date +%A).tar --gzip
