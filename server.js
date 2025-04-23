@@ -1,5 +1,6 @@
 const express = require("express");
 const fs = require("fs");
+const path = require("path");
 const app = express();
 const port = process.env.PORT || 8000;
 const bodyParser = require("body-parser");
@@ -14,9 +15,10 @@ app.use(cors({ origin: "*" }));
 
 app.get("/backup", (req, res) => {
   const dayOfWeek = new Date().toLocaleDateString("en-US", { weekday: "long" });
-  const backupPath = `/tmp/${dayOfWeek}.tar`;
+  const backupDir = `/var/tmp/${dayOfWeek}`;
+  const archivePath = `/var/tmp/${dayOfWeek}.tar.gz`;
 
-  const dumpCommand = `mongodump --host localhost --port 27017 --archive=${backupPath}.tar`;
+  const dumpCommand = `mongodump --host localhost --port 27017 --out=${backupDir}`;
 
   exec(dumpCommand, (error, stdout, stderr) => {
     if (error) {
@@ -24,16 +26,26 @@ app.get("/backup", (req, res) => {
       return res.status(500).json({ error: "Failed to create MongoDB backup" });
     }
 
-    fs.access(backupPath, fs.constants.F_OK, (err) => {
-      if (err) {
-        return res.status(404).json({ error: "Backup file not found" });
+    const tarCommand = `tar -czf ${archivePath} -C /var/tmp ${dayOfWeek}`;
+
+    exec(tarCommand, (tarError, tarStdout, tarStderr) => {
+      if (tarError) {
+        console.error("Compression error:", tarStderr);
+        return res.status(500).json({ error: "Failed to compress backup" });
       }
 
-      res.download(backupPath, `${dayOfWeek}.tar.gz`, (err) => {
+      fs.access(archivePath, fs.constants.F_OK, (err) => {
         if (err) {
-          console.error("Download error:", err);
-          return res.status(500).json({ error: "Failed to download the file" });
+          return res.status(404).json({ error: "Backup archive not found" });
         }
+
+        res.download(archivePath, `${dayOfWeek}.tar.gz`, (downloadErr) => {
+          if (downloadErr) {
+            console.error("Download error:", downloadErr);
+            return res.status(500).json({ error: "Failed to download the file" });
+          }
+
+        });
       });
     });
   });
