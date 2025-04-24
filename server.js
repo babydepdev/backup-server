@@ -81,6 +81,7 @@ app.post("/restore", upload.single("file"), (req, res) => {
   const uploadedFilePath = file.path;
   const restoreDir = path.join(__dirname, "uploads", "restore");
 
+  // ล้างโฟลเดอร์ restore ก่อน
   fs.rm(restoreDir, { recursive: true, force: true }, (rmErr) => {
     if (rmErr) {
       console.error("Failed to clean restore directory:", rmErr);
@@ -104,28 +105,53 @@ app.post("/restore", upload.single("file"), (req, res) => {
 
         console.log("Extracted to:", restoreDir);
 
-        const extractedFolder = path.join(restoreDir, "dump");
-
-        const restoreCommand = `mongorestore --host localhost --port 27017 --dir="${extractedFolder}" --drop`;
-        console.log("Running:", restoreCommand);
-
-        exec(restoreCommand, (restoreErr, restoreOut, restoreStderr) => {
-          if (restoreErr) {
-            console.error("Mongo restore error:", restoreStderr);
-            return res.status(500).json({ error: "Failed to restore MongoDB data" });
+        // อ่านโฟลเดอร์ที่ถูกแตกออกมา
+        fs.readdir(restoreDir, (readErr, files) => {
+          if (readErr) {
+            console.error("Failed to read restore directory:", readErr);
+            return res.status(500).json({ error: "Failed to read restore directory" });
           }
 
-          console.log("MongoDB restored:", restoreOut);
-          return res.json({
-            message: "MongoDB data restored successfully",
-            extractedTo: restoreDir
+          // หาโฟลเดอร์แรกที่แตกออกมา
+          const extractedFolderName = files.find(f => {
+            const fullPath = path.join(restoreDir, f);
+            return fs.lstatSync(fullPath).isDirectory();
+          });
+
+          if (!extractedFolderName) {
+            return res.status(400).json({ error: "No folder found after extracting archive" });
+          }
+
+          const oldPath = path.join(restoreDir, extractedFolderName);
+          const newPath = path.join(restoreDir, "dump");
+
+          fs.rename(oldPath, newPath, (renameErr) => {
+            if (renameErr) {
+              console.error("Failed to rename folder:", renameErr);
+              return res.status(500).json({ error: "Failed to rename folder to 'dump'" });
+            }
+
+            const restoreCommand = `mongorestore --host localhost --port 27017 --dir="${newPath}" --drop`;
+            console.log("Running:", restoreCommand);
+
+            exec(restoreCommand, (restoreErr, restoreOut, restoreStderr) => {
+              if (restoreErr) {
+                console.error("Mongo restore error:", restoreStderr);
+                return res.status(500).json({ error: "Failed to restore MongoDB data" });
+              }
+
+              console.log("MongoDB restored:", restoreOut);
+              return res.json({
+                message: "MongoDB data restored successfully",
+                extractedTo: newPath
+              });
+            });
           });
         });
       });
     });
   });
 });
-
 app.listen(port, () => {
   console.log(`Server is running on port ${port}`);
 });
